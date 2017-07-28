@@ -1,0 +1,9 @@
+version: '2'
+services:
+  ambari:
+    build: ./ambari
+    image: registry.ng.bluemix.net/allianz/ambari:0.1
+
+  hdp:
+    image: registry.ng.bluemix.net/allianz/hdp:0.1
+    build: ./hdp-node

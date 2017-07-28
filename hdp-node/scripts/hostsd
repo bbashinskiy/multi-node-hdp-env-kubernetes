@@ -1,0 +1,17 @@
+#!/bin/bash
+#set -x
+count=0
+buff=30
+while true; do
+	pods_out=`kubectl get pods -o wide|awk '$1 ~ /hdp/ && $3 ~ /Running/'`
+	IFS=$'\n'
+	for line in `echo "$pods_out"|awk '{print $6"\t"$1}'`;do
+		test -z `awk "/^$line$/" /etc/hosts` && echo "$line" >> /etc/hosts
+	done
+	if (( $count <= $buff )); then 
+		sleep 2
+		((count++))
+	else
+		sleep 180
+	fi
+done

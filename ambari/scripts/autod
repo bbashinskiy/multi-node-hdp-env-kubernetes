@@ -1,0 +1,100 @@
+#!/bin/bash
+#set -x
+
+while true; do
+        if ambari-server status | grep '^Ambari Server running$' >/dev/null ; then
+                if curl -f -s -o /dev/null http://127.0.0.1:8080 ; then
+                        echo "Ambari server is working, starting monitoring process"
+                        while true; do
+				ii=
+				hostgroups='master slave'
+                                kub_pods_out=`kubectl get pods | awk '$1 ~ /hdp/{print $1}'`
+				amb_pods_out_full=`curl -s -H "X-Requested-By: ambari" -X GET -u admin:admin http://127.0.0.1:8080/api/v1/hosts`
+                                amb_pods_out=`echo "$amb_pods_out_full"|awk -F '"' '/host_name/{print $4}'`
+                                if [ "$kub_pods_out" = "$amb_pods_out" ]; then
+                                        echo 'Consistent check between kubernet and ambari finished'
+                                        cl_name=`curl -s -H "X-Requested-By: ambari" -X GET -u admin:admin http://127.0.0.1:8080/api/v1/clusters| awk -F '"' '/cluster_name/{print $4}'`
+                                        if [ -z $cl_name ]; then
+                                                echo "New cluster creation"
+                                                cl_name=c1
+                                                passwd=admin
+						hdp_version='2.4'
+                                                echo 'Generating blueprint json config ...'
+						echo -e '{\n  "host_groups" : [' > /var/lib/ambari-server/resources/templates/blueprint.json
+						echo -e '{\n\t"blueprint": "'$cl_name'",\n\t"default_password": "'$passwd'",\n\t"host_groups": [' > /var/lib/ambari-server/resources/templates/cluster.json
+                                                num_amb_pods=`echo "$amb_pods_out"|wc -l`
+						for hostgroup in $hostgroups ; do
+							((ii++))
+							end_of_type=`echo $hostgroups|wc -w`
+							if [ $end_of_type = $ii ]; then
+                                                                last_sg=''
+                                                        else
+                                                                last_sg=','
+                                                        fi
+							if [ $hostgroup = master ]; then
+                                                                service_list='NAMENODE SECONDARY_NAMENODE RESOURCEMANAGER HISTORYSERVER HST_SERVER APP_TIMELINE_SERVER ZOOKEEPER_SERVER METRICS_GRAFANA ACTIVITY_ANALYZER ACTIVITY_EXPLORER METRICS_COLLECTOR METRICS_MONITOR'
+                                                        elif [ $hostgroup = slave ]; then
+                                                                service_list='DATANODE HDFS_CLIENT NODEMANAGER YARN_CLIENT HST_AGENT MAPREDUCE2_CLIENT ZOOKEEPER_CLIENT METRICS_MONITOR'
+                                                        else 
+								echo "Check the hosts type list and add additional condition!!!"
+								exit 1
+							fi
+							echo -e '    {\n      "components" : ['>>/var/lib/ambari-server/resources/templates/blueprint.json
+							for service in $service_list; do
+                                                                if [ $service = METRICS_MONITOR ];then
+                                                                        echo -e '        {\n          "name" : "'$service'"\n        }'>>/var/lib/ambari-server/resources/templates/blueprint.json
+                                                                else
+                                                                        echo -e '        {\n          "name" : "'$service'"\n        },'>>/var/lib/ambari-server/resources/templates/blueprint.json
+                                                                fi
+                                                	done
+							echo -e '      ],\n      "configurations" : [ ],\n      "name" : "'$hostgroup'",\n      "cardinality" : "1"\n    }'$last_sg>>/var/lib/ambari-server/resources/templates/blueprint.json
+							i=
+							echo -e '\t   {\n\t     "hosts": ['>>/var/lib/ambari-server/resources/templates/cluster.json	
+							group_pods_out=`echo "$amb_pods_out"|grep $hostgroup`
+							num_group_pods=`echo "$group_pods_out"|wc -l`
+							for hostname in $group_pods_out;do
+                                                        	((i++))
+								if [ $num_group_pods = $i ]; then
+                                                                        last_sg_i=''
+                                                                else
+                                                                        last_sg_i=','
+                                                                fi
+								echo -e '\t\t{ "fqdn": "'$hostname'" }'$last_sg_i>>/var/lib/ambari-server/resources/templates/cluster.json	
+                                                	done
+							echo -e '\t     ],\n\t     "name": "'$hostgroup'",\n\t     "configurations" : [ ]\n\t   }'$last_sg>>/var/lib/ambari-server/resources/templates/cluster.json
+						done
+						echo -e '   ],\n  "Blueprints" : {\n    "stack_name" : "HDP",\n    "stack_version" : "'$hdp_version'"\n  }\n}' >> /var/lib/ambari-server/resources/templates/blueprint.json
+                                                echo -e '\t]\n}'>>/var/lib/ambari-server/resources/templates/cluster.json
+						curl -H "X-Requested-By: ambari" -X POST -u admin:admin http://127.0.0.1:8080/api/v1/blueprints/$cl_name -d "@/var/lib/ambari-server/resources/templates/blueprint.json" && \
+        					curl -H "X-Requested-By: ambari" -X POST -u admin:admin http://127.0.0.1:8080/api/v1/clusters/$cl_name -d "@/var/lib/ambari-server/resources/templates/cluster.json"
+                                        else
+                                                echo "Cluster $cl_name exist"
+						amb_pods_in_cl=`echo "$amb_pods_out_full"|grep -A 1 'cluster_name.*'$cl_name|awk -F '"' '/host_name/{print $4}'`
+						for hostname in $amb_pods_out; do
+							if [[ $amb_pods_in_cl =~ $hostname ]]; then
+								echo "Skip $hostname already in cluster ..." 
+							else
+								for hostgroup in $hostgroups ; do
+									if [[ $hostname =~ $hostgroup ]]; then
+										echo "Adding $hostname to cluster as $hostgroup"
+										curl -H "X-Requested-By: ambari" -X POST -u admin:admin http://127.0.0.1:8080/api/v1/clusters/$cl_name/hosts/$hostname -d '{ "blueprint" : "'$cl_name'","host_group" : "'$hostgroup'" }'		
+									fi
+								done
+							fi
+						done
+						sleep 180
+                                        fi	
+                                else
+                                        echo -ne "Waiting for ALL agents regestration ...\\r"
+                                        sleep 3
+                                fi
+                        done
+                else
+                        echo -ne "Waiting for start Ambari Server ...\\r"
+                        sleep 3
+                fi
+        else
+                echo -ne "Waiting for start Ambari Server ...\\r"
+                sleep 5
+        fi
+done

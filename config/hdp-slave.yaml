@@ -1,0 +1,16 @@
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: hdp-slave
+spec:
+  serviceName: hdp-slave
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        run: hdp-slave
+    spec:
+      containers:
+      - name: hdp-slave
+        image: registry.ng.bluemix.net/allianz/hdp:0.1
+        imagePullPolicy: Always

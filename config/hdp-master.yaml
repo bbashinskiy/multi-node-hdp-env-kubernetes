@@ -1,0 +1,40 @@
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: hdp-master
+spec:
+  serviceName: hdp-master
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        run: hdp-master
+    spec:
+      containers:
+      - name: hdp-master
+        image: registry.ng.bluemix.net/allianz/hdp:0.1
+        imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hdp-web
+  labels:
+    run: hdp
+spec:
+  type: NodePort
+  ports:
+  - port: 50070
+    name: hdp-name-node
+    nodePort: 30002
+  - port: 8088
+    name: yarn
+    nodePort: 30003
+  - port: 3000
+    name: grafana
+    nodePort: 30004
+  - port: 9060
+    name: explorer
+    nodePort: 30005
+  selector:
+    run: hdp-master
