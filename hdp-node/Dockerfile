@@ -30,7 +30,7 @@ RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s
 
 ADD ./configs/supervisord.conf /etc/supervisord.conf
 COPY ./configs/supervisord.d /etc/supervisord.d
-COPY ./configs/allianz_test /.kube
+COPY ./configs/credentials /.kube
 COPY ./scripts /scripts
 
 EXPOSE 3000 8080 50070 50470 8020 8021 9000 50475 50075 50076 50010 50020 50030 50060 50090 8088 8090 8032 8033 8031 8651 8660 8661 8662 8663 10001 10000 9083 50111 51111 60000 60010 60020 60030 6188 61310 2888 3888 2181 3306 22 80

@@ -24,7 +24,7 @@ RUN ambari-server setup -s -j /usr/jdk64/jdk1.8.0_112/
 
 ADD ./configs/supervisord.conf /etc/supervisord.conf
 COPY ./configs/supervisord.d /etc/supervisord.d
-COPY ./configs/allianz_test /.kube
+COPY ./configs/credentials /.kube
 COPY ./configs/templates /var/lib/ambari-server/resources/templates
 COPY ./scripts /scripts
 
